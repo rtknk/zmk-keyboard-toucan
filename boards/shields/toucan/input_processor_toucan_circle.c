@@ -2,6 +2,7 @@
 #include <zephyr/device.h>
 #include <zephyr/input/input.h>
 #include <zmk/hid.h>
+#include <zmk/keys.h>
 #include <zmk/keymap.h>
 #include <dt-bindings/zmk/keys.h>
 #include <math.h>
