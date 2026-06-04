@@ -93,6 +93,12 @@
 };
 
 / {
+    /* カスタムプロセッサのインスタンスを定義（Fnレイヤーのインデックスを3に指定） */
+    toucan_circle_proc: toucan_circle_proc {
+        compatible = "zmk,input-processor-toucan-circle";
+        fn-layer-index = <3>;
+    };
+    
     split_inputs {
         #address-cells = <1>;
         #size-cells = <0>;
@@ -108,12 +114,16 @@
         status = "okay";               /* disabled から okay に変更して有効化 */
         device = <&glidepoint_split>;   /* Toucanの分割データ用デバイスを維持 */
         
-        /* * 【通常時の挙動】
+        /* * 【最上流の処理】
+         * トラックパッドからデータが来たら、まず自作したC言語プロセッサに流す。
+         * 外周2.5mmを触っている時は、このプロセッサがイベントを消費（DUMMY化）して
+         * 後続のマウス移動やスクロール処理をストップさせます。
          * 特定のレイヤーにいない場合は、通常のXYカーソル移動（感度2.5倍）として処理
          */
         input-processors = <&zip_xy_scaler 250 100>;
 
         /* * 【Fnキー（レイヤー3）ホールド時の挙動】
+         * 内周を触りながらFnキーを押している時だけ、上下左右スワイプをスクロールに変換。
          * レイヤー3（LAYER_FN）がアクティブな間、XYの移動量をスクロールに強制変換。
          * これにより「Fn+上下左右スワイプ」が「上下左右スクロール」になります。
          */
