@@ -3,3 +3,8 @@ config SHIELD_TOUCAN_LEFT
 
 config SHIELD_TOUCAN_RIGHT
     def_bool $(shields_list_contains,toucan_right)
+
+config ZMK_INPUT_PROCESSOR_TOUCAN_CIRCLE
+    bool "ZMK Input Processor for Toucan Circle Pad"
+    default y
+    depends on INPUT
