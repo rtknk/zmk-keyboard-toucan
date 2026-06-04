@@ -1,0 +1,2 @@
+# 既存の記述の末尾に、カスタムプロセッサファイルを条件付きでコンパイル対象に追加します
+target_sources_ifdef(CONFIG_ZMK_INPUT_PROCESSOR_TOUCAN_CIRCLE app PRIVATE input_processor_toucan_circle.c)
