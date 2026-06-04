@@ -105,11 +105,20 @@
 
     glidepoint_listener: glidepoint_listener {
         compatible = "zmk,input-listener";
-        status = "disabled";
-        device = <&glidepoint_split>;
+        status = "okay";               /* disabled から okay に変更して有効化 */
+        device = <&glidepoint_split>;   /* Toucanの分割データ用デバイスを維持 */
+        
+        /* * 【通常時の挙動】
+         * 特定のレイヤーにいない場合は、通常のXYカーソル移動（感度2.5倍）として処理
+         */
         input-processors = <&zip_xy_scaler 250 100>;
+
+        /* * 【Fnキー（レイヤー3）ホールド時の挙動】
+         * レイヤー3（LAYER_FN）がアクティブな間、XYの移動量をスクロールに強制変換。
+         * これにより「Fn+上下左右スワイプ」が「上下左右スクロール」になります。
+         */
         scroller {
-            layers = <1 2>;
+            layers = <3>; /* ファンクションキーを押している間のレイヤー番号を指定 */
             input-processors = <
                 &zip_xy_to_scroll_mapper
                 &zip_scroll_scaler 1 5
