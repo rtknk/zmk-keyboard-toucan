@@ -1,10 +1,11 @@
-#define _USE_MATH_DEFINES // 一部の環境でM_PIを有効化するために必須
+#define _USE_MATH_DEFINES
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/input/input.h>
+#include <math.h>              // ← 復活させました！
 #include <zmk/hid.h>
 #include <zmk/keymap.h>
-#include <zmk/endpoints.h> // HIDレポート送信用に追加
+#include <zmk/endpoints.h>
 #include <dt-bindings/zmk/keys.h>
 
 // M_PI が math.h から取得できなかった場合の安全なフォールバック
@@ -14,14 +15,11 @@
 
 #define DT_DRV_COMPAT zmk_input_processor_toucan_circle
 
-// 40mm CirqueのPinnacle最大解像度範囲（通常0〜2047、中心1024）
+// 40mm CirqueのPinnacle最大解像度範囲（中心1024）
 #define TRACKPAD_CENTER_X 1024
 #define TRACKPAD_CENTER_Y 1024
-
-// 辺縁2.5mmに相当するカウント閾値（半径約896カウント以上を外周とする）
 #define RIM_THRESHOLD_RADIUS 896 
 
-// 角度のラジアンから度への変換
 #define RAD_TO_DEG(r) ((r) * 180.0 / M_PI)
 
 struct ip_toucan_circle_config {
@@ -36,15 +34,15 @@ struct ip_toucan_circle_data {
     bool is_first_touch;
 };
 
-// ZMKの正しいHID構造体を叩いてキーを擬似的に送出するヘルパー関数
-static void send_key(zmk_key_t key, bool press) {
+// ZMKの正式なHIDレイヤー関数（zmk_hid_keyboard_press等）を叩くヘルパー関数
+static void send_key(uint32_t usage_id, bool press) {
     if (press) {
-        zmk_hid_press_key(key);
+        zmk_hid_keyboard_press(usage_id);
     } else {
-        zmk_hid_release_key(key);
+        zmk_hid_keyboard_release(usage_id);
     }
-    // 変更されたHIDレポートを実際にPCへ送信する
-    zmk_endpoints_send_report(zmk_hid_get_profile());
+    // HIDレポートをホストPCに送信
+    zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
 }
 
 static void process_toucan_circle(const struct device *dev, struct input_event *evt) {
@@ -63,23 +61,18 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         if (evt->code == INPUT_ABS_X) data->last_x = evt->value;
         if (evt->code == INPUT_ABS_Y) data->last_y = evt->value;
 
-        // 中心からの相対座標を算出
         int32_t dx = data->last_x - TRACKPAD_CENTER_X;
         int32_t dy = data->last_y - TRACKPAD_CENTER_Y;
 
-        // 三平方の定理で半径の距離を確認
         uint32_t current_r = (uint32_t)(dx * dx + dy * dy);
         
-        // 判定高速化のため、閾値を二乗してルート(sqrt)の計算を回避
+        // 辺縁エリア判定
         if (current_r < (RIM_THRESHOLD_RADIUS * RIM_THRESHOLD_RADIUS)) {
             data->is_first_touch = true;
             data->accumulated_angle = 0.0;
-            return; // 内周なら何もせず後続プロセッサに流す
+            return; 
         }
 
-        // 角度θを算出（結果は -π 〜 +π）
-        // Zephyrのツールチェーンで競合を避けるため、直接計算ロジックを展開、または組込み関数を使用
-        // ここでは一般的な近似、または単純なatan2を使用。標準Cとして処理
         double current_angle = atan2((double)dy, (double)dx);
         if (current_angle < 0) current_angle += 2 * M_PI;
 
@@ -89,7 +82,6 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
             return;
         }
 
-        // 角度の変化量（dθ）を計算
         double d_angle = current_angle - data->last_angle;
         if (d_angle > M_PI) d_angle -= 2 * M_PI;
         else if (d_angle < -M_PI) d_angle += 2 * M_PI;
@@ -97,28 +89,29 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         data->accumulated_angle += RAD_TO_DEG(d_angle);
         data->last_angle = current_angle;
 
-        // 現在Fnレイヤーがアクティブかどうかを取得
         bool fn_active = zmk_keymap_layer_active(config->fn_layer_index);
-
-        // 指が現在の「上半周」か「下半周」かを判定
         bool is_upper_half = (current_angle >= 0 && current_angle < M_PI);
 
+        // -----------------------------------------------------------------
         // ジェスチャー判定
+        // 引数には ZMKの標準ヘッダー（dt-bindings/zmk/keys.h）が公開している
+        // 確実なネイティブのHIDインデックス（例: ZMK_HID_USAGE_KEY_...）を直接渡します
+        // -----------------------------------------------------------------
         if (fn_active) {
             // 【Fnホールド状態】1周（360度）回転
             if (data->accumulated_angle >= 360.0) {
                 // 時計回り：ピンチアウト (Ctrl + Wheel Up)
-                send_key(KC_LCTRL, true);
+                zmk_hid_keyboard_press(0x01, 0xE0); // LCTRLの生HIDモディファイア
                 zmk_hid_mouse_scroll_up();
-                zmk_endpoints_send_report(zmk_hid_get_profile());
-                send_key(KC_LCTRL, false);
+                zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
+                zmk_hid_keyboard_release(0x01, 0xE0);
                 data->accumulated_angle = 0.0;
             } else if (data->accumulated_angle <= -360.0) {
                 // 反時計回り：ピンチイン (Ctrl + Wheel Down)
-                send_key(KC_LCTRL, true);
+                zmk_hid_keyboard_press(0x01, 0xE0); // LCTRLの生HIDモディファイア
                 zmk_hid_mouse_scroll_down();
-                zmk_endpoints_send_report(zmk_hid_get_profile());
-                send_key(KC_LCTRL, false);
+                zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
+                zmk_hid_keyboard_release(0x01, 0xE0);
                 data->accumulated_angle = 0.0;
             }
         } else {
@@ -126,35 +119,40 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
             if (is_upper_half) {
                 // 上半周：音量調整（閾値30度）
                 if (data->accumulated_angle >= 30.0) {
-                    send_key(KC_C_VOL_UP, true);
-                    send_key(KC_C_VOL_UP, false);
+                    // 音量1段階UP
+                    zmk_hid_consumer_press(0x00E9); // VOLUME_INCREMENT の生HID
+                    zmk_hid_consumer_release(0x00E9);
+                    zmk_endpoints_send_report(HID_USAGE_GD_CONSUMER);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -30.0) {
-                    send_key(KC_C_VOL_DN, true);
-                    send_key(KC_C_VOL_DN, false);
+                    // 音量1段階DOWN
+                    zmk_hid_consumer_press(0x00EA); // VOLUME_DECREMENT の生HID
+                    zmk_hid_consumer_release(0x00EA);
+                    zmk_endpoints_send_report(HID_USAGE_GD_CONSUMER);
                     data->accumulated_angle = 0.0;
                 }
             } else {
                 // 下半周：ページ進み・戻り（閾値60度）
                 if (data->accumulated_angle >= 60.0) {
                     // 時計回り：1ページ戻り（Alt + Left）
-                    send_key(KC_LALT, true);
-                    send_key(KC_LEFT, true);
-                    send_key(KC_LEFT, false);
-                    send_key(KC_LALT, false);
+                    zmk_hid_keyboard_press(0x04, 0xE0); // LALT
+                    zmk_hid_keyboard_press(0x50, 0x00); // LEFT ARROW
+                    zmk_hid_keyboard_release(0x50, 0x00);
+                    zmk_hid_keyboard_release(0x04, 0xE0);
+                    zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -60.0) {
                     // 反時計回り：1ページ送り（Alt + Right）
-                    send_key(KC_LALT, true);
-                    send_key(KC_RIGHT, true);
-                    send_key(KC_RIGHT, false);
-                    send_key(KC_LALT, false);
+                    zmk_hid_keyboard_press(0x04, 0xE0); // LALT
+                    zmk_hid_keyboard_press(0x4F, 0x00); // RIGHT ARROW
+                    zmk_hid_keyboard_release(0x4F, 0x00);
+                    zmk_hid_keyboard_release(0x04, 0xE0);
+                    zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                     data->accumulated_angle = 0.0;
                 }
             }
         }
         
-        // イベントをダミー化して通常のマウス移動信号を完全に消去
         evt->type = INPUT_EV_DUMMY; 
     }
 }
@@ -176,4 +174,3 @@ static int ip_toucan_circle_init(const struct device *dev) { return 0; }
                            CONFIG_APPLICATION_INIT_PRIORITY);
 
 DT_INST_FOREACH_STATUS_OKAY(INST_IP_TOUCAN_CIRCLE)
-
