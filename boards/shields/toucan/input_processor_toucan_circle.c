@@ -58,7 +58,7 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         if (current_r < (RIM_THRESHOLD_RADIUS * RIM_THRESHOLD_RADIUS)) {
             data->is_first_touch = true;
             data->accumulated_angle = 0.0;
-            return; 
+            return; // 内周タッチ時は何もしない（通常のマウス移動やスワイプ用スクロールに任せる）
         }
 
         double current_angle = atan2((double)dy, (double)dx);
@@ -81,27 +81,26 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         bool is_upper_half = (current_angle >= 0 && current_angle < M_PI);
 
         // -----------------------------------------------------------------
-        // ジェスチャー判定＆ZMK3.5.0 API最適化
-        // 左Ctrl=0xE0, 左Alt=0xE2, Left=0x50, Right=0x4F
+        // ジェスチャー判定
         // -----------------------------------------------------------------
         if (fn_active) {
-            // 【Fnホールド状態】1周（360度）回転でピンチイン・アウト
+            // 【Fnホールド状態】1周（360度）回転
             if (data->accumulated_angle >= 360.0) {
                 // 時計回り：ピンチアウト (Ctrl + Wheel Up)
                 zmk_hid_keyboard_press(0xE0);
-                zmk_hid_mouse_scroll_set(0, 1); // 正しい縦スクロール関数（Y=1）
+                zmk_hid_mouse_scroll_set(0, 1);
                 zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                 zmk_hid_keyboard_release(0xE0);
-                zmk_hid_mouse_scroll_set(0, 0); // スクロール状態をクリア
+                zmk_hid_mouse_scroll_set(0, 0);
                 zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                 data->accumulated_angle = 0.0;
             } else if (data->accumulated_angle <= -360.0) {
                 // 反時計回り：ピンチイン (Ctrl + Wheel Down)
                 zmk_hid_keyboard_press(0xE0);
-                zmk_hid_mouse_scroll_set(0, -1); // 正しい縦スクロール関数（Y=-1）
+                zmk_hid_mouse_scroll_set(0, -1);
                 zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                 zmk_hid_keyboard_release(0xE0);
-                zmk_hid_mouse_scroll_set(0, 0); // スクロール状態をクリア
+                zmk_hid_mouse_scroll_set(0, 0);
                 zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                 data->accumulated_angle = 0.0;
             }
@@ -113,13 +112,13 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
                     // 音量1段階UP
                     zmk_hid_consumer_press(0x00E9); 
                     zmk_hid_consumer_release(0x00E9);
-                    zmk_endpoints_send_report(HID_USAGE_CONSUMER); // 正しい識別子に修正
+                    zmk_endpoints_send_report(HID_USAGE_CONSUMER);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -30.0) {
                     // 音量1段階DOWN
                     zmk_hid_consumer_press(0x00EA); 
                     zmk_hid_consumer_release(0x00EA);
-                    zmk_endpoints_send_report(HID_USAGE_CONSUMER); // 正しい識別子に修正
+                    zmk_endpoints_send_report(HID_USAGE_CONSUMER);
                     data->accumulated_angle = 0.0;
                 }
             } else {
@@ -144,7 +143,10 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
             }
         }
         
-        evt->type = INPUT_EV_DUMMY; 
+        // 通常のマウスカーソル移動イベントとして処理されないよう、データ内容をクリア
+        evt->type = 0;
+        evt->code = 0;
+        evt->value = 0;
     }
 }
 
