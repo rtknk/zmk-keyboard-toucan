@@ -2,13 +2,12 @@
 #include <zephyr/kernel.h>
 #include <zephyr/device.h>
 #include <zephyr/input/input.h>
-#include <math.h>              // ← 復活させました！
+#include <math.h>
 #include <zmk/hid.h>
 #include <zmk/keymap.h>
 #include <zmk/endpoints.h>
 #include <dt-bindings/zmk/keys.h>
 
-// M_PI が math.h から取得できなかった場合の安全なフォールバック
 #ifndef M_PI
 #define M_PI 3.14159265358979323846
 #endif
@@ -34,14 +33,13 @@ struct ip_toucan_circle_data {
     bool is_first_touch;
 };
 
-// ZMKの正式なHIDレイヤー関数（zmk_hid_keyboard_press等）を叩くヘルパー関数
+// ZMKの正しい引数1つ（Usage ID）の型に修正
 static void send_key(uint32_t usage_id, bool press) {
     if (press) {
         zmk_hid_keyboard_press(usage_id);
     } else {
         zmk_hid_keyboard_release(usage_id);
     }
-    // HIDレポートをホストPCに送信
     zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
 }
 
@@ -94,24 +92,24 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
 
         // -----------------------------------------------------------------
         // ジェスチャー判定
-        // 引数には ZMKの標準ヘッダー（dt-bindings/zmk/keys.h）が公開している
-        // 確実なネイティブのHIDインデックス（例: ZMK_HID_USAGE_KEY_...）を直接渡します
+        // 各キーコードの引数を ZMKコアが想定する単一のキーUsage（1ポート）に修正
+        // 左Ctrl=0xE0, 左Alt=0xE2, Left=0x50, Right=0x4F
         // -----------------------------------------------------------------
         if (fn_active) {
             // 【Fnホールド状態】1周（360度）回転
             if (data->accumulated_angle >= 360.0) {
                 // 時計回り：ピンチアウト (Ctrl + Wheel Up)
-                zmk_hid_keyboard_press(0x01, 0xE0); // LCTRLの生HIDモディファイア
+                zmk_hid_keyboard_press(0xE0); // 左Ctrl
                 zmk_hid_mouse_scroll_up();
                 zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
-                zmk_hid_keyboard_release(0x01, 0xE0);
+                zmk_hid_keyboard_release(0xE0);
                 data->accumulated_angle = 0.0;
             } else if (data->accumulated_angle <= -360.0) {
                 // 反時計回り：ピンチイン (Ctrl + Wheel Down)
-                zmk_hid_keyboard_press(0x01, 0xE0); // LCTRLの生HIDモディファイア
+                zmk_hid_keyboard_press(0xE0); // 左Ctrl
                 zmk_hid_mouse_scroll_down();
                 zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
-                zmk_hid_keyboard_release(0x01, 0xE0);
+                zmk_hid_keyboard_release(0xE0);
                 data->accumulated_angle = 0.0;
             }
         } else {
@@ -120,13 +118,13 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
                 // 上半周：音量調整（閾値30度）
                 if (data->accumulated_angle >= 30.0) {
                     // 音量1段階UP
-                    zmk_hid_consumer_press(0x00E9); // VOLUME_INCREMENT の生HID
+                    zmk_hid_consumer_press(0x00E9); 
                     zmk_hid_consumer_release(0x00E9);
                     zmk_endpoints_send_report(HID_USAGE_GD_CONSUMER);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -30.0) {
                     // 音量1段階DOWN
-                    zmk_hid_consumer_press(0x00EA); // VOLUME_DECREMENT の生HID
+                    zmk_hid_consumer_press(0x00EA); 
                     zmk_hid_consumer_release(0x00EA);
                     zmk_endpoints_send_report(HID_USAGE_GD_CONSUMER);
                     data->accumulated_angle = 0.0;
@@ -135,18 +133,18 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
                 // 下半周：ページ進み・戻り（閾値60度）
                 if (data->accumulated_angle >= 60.0) {
                     // 時計回り：1ページ戻り（Alt + Left）
-                    zmk_hid_keyboard_press(0x04, 0xE0); // LALT
-                    zmk_hid_keyboard_press(0x50, 0x00); // LEFT ARROW
-                    zmk_hid_keyboard_release(0x50, 0x00);
-                    zmk_hid_keyboard_release(0x04, 0xE0);
+                    zmk_hid_keyboard_press(0xE2);   // 左Alt
+                    zmk_hid_keyboard_press(0x50);   // Left Arrow
+                    zmk_hid_keyboard_release(0x50);
+                    zmk_hid_keyboard_release(0xE2);
                     zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -60.0) {
                     // 反時計回り：1ページ送り（Alt + Right）
-                    zmk_hid_keyboard_press(0x04, 0xE0); // LALT
-                    zmk_hid_keyboard_press(0x4F, 0x00); // RIGHT ARROW
-                    zmk_hid_keyboard_release(0x4F, 0x00);
-                    zmk_hid_keyboard_release(0x04, 0xE0);
+                    zmk_hid_keyboard_press(0xE2);   // 左Alt
+                    zmk_hid_keyboard_press(0x4F);   // Right Arrow
+                    zmk_hid_keyboard_release(0x4F);
+                    zmk_hid_keyboard_release(0xE2);
                     zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                     data->accumulated_angle = 0.0;
                 }
