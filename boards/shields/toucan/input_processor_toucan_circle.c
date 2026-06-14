@@ -145,7 +145,7 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
             }
         }
         
-        // 通常のマウスカーソル移動信号をドロップ
+        // イベントデータを安全にクリア
         evt->type = 0;
         evt->code = 0;
         evt->value = 0;
@@ -154,8 +154,6 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
 
 static int ip_toucan_circle_init(const struct device *dev) { return 0; }
 
-// Zephyr 3.5.0 の INPUT_PROCESSOR_DEFINE マクロ仕様に完全適合化
-// 引数のアドレス参照ポインタ「&」を取り除き、実体を直接バインド
 #define INST_IP_TOUCAN_CIRCLE(n)                                              \
     static struct ip_toucan_circle_data ip_toucan_circle_data_##n = {         \
         .is_first_touch = true,                                               \
@@ -168,6 +166,6 @@ static int ip_toucan_circle_init(const struct device *dev) { return 0; }
                            ip_toucan_circle_data_##n,                         \
                            ip_toucan_circle_config_##n,                       \
                            ip_toucan_circle_init, POST_KERNEL,                \
-                           CONFIG_APPLICATION_INIT_PRIORITY);
+                           90); /* マクロマッピングのバグを避けるため、90を直に指定 */
 
 DT_INST_FOREACH_STATUS_OKAY(INST_IP_TOUCAN_CIRCLE)
