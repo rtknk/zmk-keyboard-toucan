@@ -21,7 +21,7 @@
 
 #define RAD_TO_DEG(r) ((r) * 180.0 / M_PI)
 
-// デバイスツリーのバグを回避するため、Fnレイヤーのインデックス（3）をここに直接固定します
+// Fnレイヤーのインデックス（3）
 #define TOUCAN_FN_LAYER_INDEX 3
 
 struct ip_toucan_circle_config {
@@ -79,7 +79,6 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         data->accumulated_angle += RAD_TO_DEG(d_angle);
         data->last_angle = current_angle;
 
-        // 固定値マクロからFnレイヤーのアクティブ状態を取得
         bool fn_active = zmk_keymap_layer_active(TOUCAN_FN_LAYER_INDEX);
         bool is_upper_half = (current_angle >= 0 && current_angle < M_PI);
 
@@ -155,6 +154,8 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
 
 static int ip_toucan_circle_init(const struct device *dev) { return 0; }
 
+// Zephyr 3.5.0 の INPUT_PROCESSOR_DEFINE マクロ仕様に完全適合化
+// 引数のアドレス参照ポインタ「&」を取り除き、実体を直接バインド
 #define INST_IP_TOUCAN_CIRCLE(n)                                              \
     static struct ip_toucan_circle_data ip_toucan_circle_data_##n = {         \
         .is_first_touch = true,                                               \
@@ -164,8 +165,8 @@ static int ip_toucan_circle_init(const struct device *dev) { return 0; }
         .fn_layer_index = TOUCAN_FN_LAYER_INDEX,                              \
     };                                                                        \
     INPUT_PROCESSOR_DEFINE(DT_DRV_INST(n), process_toucan_circle,             \
-                           &ip_toucan_circle_data_##n,                        \
-                           &ip_toucan_circle_config_##n,                      \
+                           ip_toucan_circle_data_##n,                         \
+                           ip_toucan_circle_config_##n,                       \
                            ip_toucan_circle_init, POST_KERNEL,                \
                            CONFIG_APPLICATION_INIT_PRIORITY);
 
