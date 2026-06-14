@@ -21,6 +21,9 @@
 
 #define RAD_TO_DEG(r) ((r) * 180.0 / M_PI)
 
+// デバイスツリーのバグを回避するため、Fnレイヤーのインデックス（3）をここに直接固定します
+#define TOUCAN_FN_LAYER_INDEX 3
+
 struct ip_toucan_circle_config {
     uint8_t fn_layer_index;
 };
@@ -34,7 +37,6 @@ struct ip_toucan_circle_data {
 };
 
 static void process_toucan_circle(const struct device *dev, struct input_event *evt) {
-    const struct ip_toucan_circle_config *config = dev->config;
     struct ip_toucan_circle_data *data = dev->data;
 
     // タッチが離れた（Touch Up）イベントの検知
@@ -58,7 +60,7 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         if (current_r < (RIM_THRESHOLD_RADIUS * RIM_THRESHOLD_RADIUS)) {
             data->is_first_touch = true;
             data->accumulated_angle = 0.0;
-            return; // 内周タッチ時は何もしない（通常のマウス移動やスワイプ用スクロールに任せる）
+            return; 
         }
 
         double current_angle = atan2((double)dy, (double)dx);
@@ -77,7 +79,8 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         data->accumulated_angle += RAD_TO_DEG(d_angle);
         data->last_angle = current_angle;
 
-        bool fn_active = zmk_keymap_layer_active(config->fn_layer_index);
+        // 固定値マクロからFnレイヤーのアクティブ状態を取得
+        bool fn_active = zmk_keymap_layer_active(TOUCAN_FN_LAYER_INDEX);
         bool is_upper_half = (current_angle >= 0 && current_angle < M_PI);
 
         // -----------------------------------------------------------------
@@ -143,7 +146,7 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
             }
         }
         
-        // 通常のマウスカーソル移動イベントとして処理されないよう、データ内容をクリア
+        // 通常のマウスカーソル移動信号をドロップ
         evt->type = 0;
         evt->code = 0;
         evt->value = 0;
@@ -158,7 +161,7 @@ static int ip_toucan_circle_init(const struct device *dev) { return 0; }
         .accumulated_angle = 0.0,                                             \
     };                                                                        \
     static const struct ip_toucan_circle_config ip_toucan_circle_config_##n = { \
-        .fn_layer_index = DT_INST_PROP(n, fn_layer_index),                    \
+        .fn_layer_index = TOUCAN_FN_LAYER_INDEX,                              \
     };                                                                        \
     INPUT_PROCESSOR_DEFINE(DT_DRV_INST(n), process_toucan_circle,             \
                            &ip_toucan_circle_data_##n,                        \
