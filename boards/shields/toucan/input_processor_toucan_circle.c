@@ -86,7 +86,6 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
         // ジェスチャー判定
         // -----------------------------------------------------------------
         if (fn_active) {
-            // 【Fnホールド状態】1周（360度）回転
             if (data->accumulated_angle >= 360.0) {
                 // 時計回り：ピンチアウト (Ctrl + Wheel Up)
                 zmk_hid_keyboard_press(0xE0);
@@ -107,26 +106,22 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
                 data->accumulated_angle = 0.0;
             }
         } else {
-            // 【通常状態】
             if (is_upper_half) {
-                // 上半周：音量調整（閾値30度）
+                // 上半周：音量調整
                 if (data->accumulated_angle >= 30.0) {
-                    // 音量1段階UP
                     zmk_hid_consumer_press(0x00E9); 
                     zmk_hid_consumer_release(0x00E9);
                     zmk_endpoints_send_report(HID_USAGE_CONSUMER);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -30.0) {
-                    // 音量1段階DOWN
                     zmk_hid_consumer_press(0x00EA); 
                     zmk_hid_consumer_release(0x00EA);
                     zmk_endpoints_send_report(HID_USAGE_CONSUMER);
                     data->accumulated_angle = 0.0;
                 }
             } else {
-                // 下半周：ページ進み・戻り（閾値60度）
+                // 下半周：ページ進み・戻り
                 if (data->accumulated_angle >= 60.0) {
-                    // 時計回り：1ページ戻り（Alt + Left）
                     zmk_hid_keyboard_press(0xE2);   // 左Alt
                     zmk_hid_keyboard_press(0x50);   // Left Arrow
                     zmk_hid_keyboard_release(0x50);
@@ -134,7 +129,6 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
                     zmk_endpoints_send_report(HID_USAGE_GD_KEYBOARD);
                     data->accumulated_angle = 0.0;
                 } else if (data->accumulated_angle <= -60.0) {
-                    // 反時計回り：1ページ送り（Alt + Right）
                     zmk_hid_keyboard_press(0xE2);   // 左Alt
                     zmk_hid_keyboard_press(0x4F);   // Right Arrow
                     zmk_hid_keyboard_release(0x4F);
@@ -145,27 +139,40 @@ static void process_toucan_circle(const struct device *dev, struct input_event *
             }
         }
         
-        // イベントデータを安全にクリア
+        // 通常のマウス移動イベント信号を安全にドロップ
         evt->type = 0;
         evt->code = 0;
         evt->value = 0;
     }
 }
 
+// ZMKのインプットプロセッサ API 構造体を直接手動でバインド
+struct zmk_input_processor_api {
+    void (*handle_event)(const struct device *dev, struct input_event *evt);
+};
+
+static const struct zmk_input_processor_api toucan_circle_api = {
+    .handle_event = process_toucan_circle,
+};
+
 static int ip_toucan_circle_init(const struct device *dev) { return 0; }
 
-#define INST_IP_TOUCAN_CIRCLE(n)                                              \
-    static struct ip_toucan_circle_data ip_toucan_circle_data_##n = {         \
-        .is_first_touch = true,                                               \
-        .accumulated_angle = 0.0,                                             \
-    };                                                                        \
-    static const struct ip_toucan_circle_config ip_toucan_circle_config_##n = { \
-        .fn_layer_index = TOUCAN_FN_LAYER_INDEX,                              \
-    };                                                                        \
-    INPUT_PROCESSOR_DEFINE(DT_DRV_INST(n), process_toucan_circle,             \
-                           ip_toucan_circle_data_##n,                         \
-                           ip_toucan_circle_config_##n,                       \
-                           ip_toucan_circle_init, POST_KERNEL,                \
-                           90); /* マクロマッピングのバグを避けるため、90を直に指定 */
+// インスタンス(n=0)の実体を直接書き下し、マクロ展開バグを100%回避
+static struct ip_toucan_circle_data ip_toucan_circle_data_0 = {
+    .is_first_touch = true,
+    .accumulated_angle = 0.0,
+};
 
-DT_INST_FOREACH_STATUS_OKAY(INST_IP_TOUCAN_CIRCLE)
+static const struct ip_toucan_circle_config ip_toucan_circle_config_0 = {
+    .fn_layer_index = TOUCAN_FN_LAYER_INDEX,
+};
+
+// Zephyrカーネル標準の安定した低層デバイス定義マクロをダイレクトに使用
+DEVICE_DT_INST_DEFINE(0,
+                      ip_toucan_circle_init,
+                      NULL,
+                      &ip_toucan_circle_data_0,
+                      &ip_toucan_circle_config_0,
+                      POST_KERNEL,
+                      90,
+                      &toucan_circle_api);
